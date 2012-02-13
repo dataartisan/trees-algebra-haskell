@@ -74,18 +74,22 @@ fold f g (Fork y l r) = g y (fold f g l) (fold f g r)
 
 leaves :: ATree a b -> Int
 leaves = fold (const 1) (const (+))
+--                      (\_ u v -> u + v)
 
 forks :: ATree a b -> Int
 forks = fold (const 0) (const ((succ .) . (+)))
+--                     (\_ u v -> 1 + u + v)
 
 height :: ATree a b -> Int
 height = fold (const 0) (const ((succ .) . max))
+--                     (\_ u v -> 1 + (u `max` v))
 
 mapCata :: (a -> c) -> (b -> d) -> ATree a b -> ATree c d
 mapCata f g = fold (Leaf . f) (Fork . g)
 
 fringe :: ATree a b -> [a]
 fringe = fold (:[]) (const (++))
+--            (\x -> [x]) (\_ u v -> u ++ v)
 
 testsATreeLeavesCata = testsATreeLeaves leaves
 testsATreeForksCata  = testsATreeForks forks
@@ -136,21 +140,45 @@ down                :: Int -> ATree a b -> ATree Int Int
 down n (Leaf _)     = Leaf n
 down n (Fork _ l r) = Fork n (down (n + 1) l) (down (n + 1) r)
 
--- can you write "down" as a map? as a fold? as an unfold?
+--exercise: what does down do?
+--exercise: can you write "down" as a map? as a fold? as an unfold?
 
-flatten :: ATree a b -> [Either a b]
-flatten = fold ((:[]) . Left) (\w l r -> Right w : l ++ r)
+flattenR :: ATree a b -> [Either a b]
+--flattenR = fold ((:[]) . Left) (\w l r -> Right w : l ++ r)
+flattenR = fold ((:[]) . Left) (((++) .) . (:) . Right)
 
-testsATreeFlatten =
+testsATreeFlatten flatten =
   TestList
   [ TestLabel "ATreeFlatten1" (TestCase ([1,2,4,5,3,6,7] @=? (map (either id id) (flatten t4))))
   , TestLabel "ATreeFlatten2" (TestCase ([1,4,2,3,5,6,7] @=? (map (either id id) (flatten t4''))))
   ]
+  
+testsATreeFlattenR = testsATreeFlatten flattenR  
 
-breadth :: ATree a b -> Int
-breadth = maximum . map length . group . sort . map (either id id) . flatten . depths
+--these two accessors are adapted from Data.Tree
 
-testsATreeBreadth =
+rootLabel :: ATree a b -> Either a b
+rootLabel (Leaf x)     = Left x
+rootLabel (Fork w _ _) = Right w
+
+subForest :: ATree a b -> [ATree a b]
+subForest (Leaf _)     = []
+subForest (Fork _ l r) = [l, r]
+
+--literally from Data.Tree
+
+levels   :: ATree a b -> [[Either a b]]
+levels t = 
+  map (map rootLabel) $
+        takeWhile (not . null) $
+        iterate (concatMap subForest) [t]
+
+--breadth :: ATree a b -> Int
+--exercise
+--hint: start with levels and perform two more simple steps
+--then reenable test below
+
+testsATreeBreadth breadth =
   TestList
   [ TestLabel "ATreeBreadth1" (TestCase (4 @=? breadth t4))
   , TestLabel "ATreeBreadth2" (TestCase (2 @=? breadth t4''))
@@ -169,6 +197,6 @@ testsATreeAll =
   , testsATreeFringe
   , testsATreeMapAna
   , testsATreeMkTree
-  , testsATreeFlatten
-  , testsATreeBreadth
+  , testsATreeFlattenR
+--  , testsATreeBreadth
   ]
